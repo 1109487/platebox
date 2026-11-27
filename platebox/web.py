@@ -26,6 +26,11 @@ from .addrguard import AddressGuard
 from .auth import MIN_PASSWORD, Signer, Throttle, hash_password, new_code, password_problem, verify_password
 from .config import Config
 from .db import Db, now_iso
+from .bus_api import mount_bus
+from .device_api import mount_devices
+from .devices import Devices
+from .faces import CvFaceFinder, models_dir
+from .passengers import Passengers
 from .discovery import find_cameras
 from .intake import Intake
 from .live import LiveView
@@ -46,7 +51,7 @@ STEPS = ("network", "camera", "configure", "done")
 class Box:
     """Everything the web layer needs, built once."""
 
-    def __init__(self, cfg: Config, reader: Reader | None = None, net=None) -> None:
+    def __init__(self, cfg: Config, reader: Reader | None = None, net=None, faces=None) -> None:
         cfg.data_dir.mkdir(parents=True, exist_ok=True)
         cfg.intake_dir.mkdir(parents=True, exist_ok=True)
         cfg.media_dir.mkdir(parents=True, exist_ok=True)
@@ -68,6 +73,12 @@ class Box:
         self.intake.skip_uploads = lambda: self.db.get("watch_ignore_uploads", "1") == "1" and self.watcher.healthy()
         self.guard.pulling = self.watcher.healthy      # pictures coming from the video itself need no upload address
         self.throttle = Throttle()
+        self.devices = Devices(cfg, self.db)
+        self.faces = faces or CvFaceFinder(models_dir(cfg.data_dir))
+        self.passengers = Passengers(cfg, self.db, self.devices)
+        self.intake.bus_mode = lambda: self.devices.mode() == "bus"
+        self.intake.faces = self.faces
+        self.intake.passengers = self.passengers
         # The camera's own "Test" button writes into a folder named FTP_TEST. That is not a camera.
         self.db.run("DELETE FROM cameras WHERE serial = 'FTP_TEST' AND uploads = 0")
         self.search_job: dict = {"running": False, "results": [], "at": None, "error": None}
@@ -99,6 +110,15 @@ class Box:
     @property
     def done(self) -> bool:
         return self.step == "done"
+
+    def faces_ready(self) -> bool:
+        """Can faces be read here? (The two model files are present; a stand-in used by tests always is.)"""
+        return bool(getattr(self.faces, "available", True))
+
+    def faces_error(self) -> str | None:
+        if self.faces_ready():
+            return getattr(self.faces, "error", None)
+        return getattr(self.faces, "error", None) or f"the face model files are not in {getattr(self.faces, 'folder', '?')}."
 
     def setup_code(self) -> str:
         f = self.cfg.setup_code_file
@@ -194,9 +214,9 @@ async def mjpeg_body(request, sub):
         sub.close()
 
 
-def create_app(cfg: Config | None = None, *, reader: Reader | None = None, net=None) -> FastAPI:
+def create_app(cfg: Config | None = None, *, reader: Reader | None = None, net=None, faces=None) -> FastAPI:
     cfg = cfg or Config.from_env()
-    box = Box(cfg, reader, net)
+    box = Box(cfg, reader, net, faces)
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         if not box.claimed:
@@ -246,6 +266,7 @@ def create_app(cfg: Config | None = None, *, reader: Reader | None = None, net=N
 
     def render(request: Request, name: str, **ctx) -> HTMLResponse:
         nav = logged_in(request) and box.done
+        ctx.setdefault("bus_mode", box.devices.mode() == "bus")
         guard = box.guard.status() if nav and not cfg.server_mode else None
         hint = bool(nav and not cfg.server_mode and box.camera_ip() and box.live.credentials() is None and box.db.get("watch_enabled", "1") != "0")
         return templates.TemplateResponse(request, name, {"box": box, "cfg": cfg, "nav": nav, "guard": guard, "watch_hint": hint, **ctx})
@@ -403,7 +424,9 @@ def create_app(cfg: Config | None = None, *, reader: Reader | None = None, net=N
 
     # -- plates ----------------------------------------------------------------------------
     @app.get("/", response_class=HTMLResponse, dependencies=[Depends(need_done)])
-    def plates(request: Request, q: str = ""):
+    def plates(request: Request, q: str = "", plates: str = ""):
+        if box.devices.mode() == "bus" and not q and not plates:      # a bus installation opens on its passengers
+            return RedirectResponse("/passengers", status_code=303)
         return render(request, "plates.html", q=q, items=box.sightings.grouped(q), total=box.sightings.count_plates(q),
                       totals=box.sightings.totals(), cam=box.camera_status(), active="plates")
 
@@ -544,6 +567,8 @@ def create_app(cfg: Config | None = None, *, reader: Reader | None = None, net=N
                    watch_user=box.live.user(), watch_sensitivity=box.watcher.sensitivity(),
                    watch_ignore=box.db.get("watch_ignore_uploads", "1") == "1",
                    totals=box.sightings.totals(), motion=box.motion.stats(),
+                   mode=box.devices.mode(), bus=box.passengers.settings(), faces_ready=box.faces_ready(),
+                   faces_error=box.faces_error(), rides_total=box.passengers.summary()["total"],
                    motion_limits=(MOTION_MIN_MB, MOTION_MAX_MB))
         ctx.update(extra)
         return ctx
@@ -755,4 +780,7 @@ def create_app(cfg: Config | None = None, *, reader: Reader | None = None, net=N
         _power("poweroff")
         return render(request, "settings.html", **settings_ctx(request, saved="Shutting down. Wait for the light to go out before unplugging."))
 
+    mount_devices(app, box, render, need_done, same_origin)
+    mount_bus(app, box, render, need_done, api_admin, same_origin,
+              lambda request, **extra: render(request, "settings.html", **settings_ctx(request, **extra)))
     return app

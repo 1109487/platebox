@@ -94,7 +94,75 @@ CREATE TABLE seen_pictures (
 CREATE INDEX seen_pictures_t_idx ON seen_pictures (t);
 """
 
-MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4]
+# Gateways (the 4G boxes between a camera and a server), the firmware kept here for them, and where each one was.
+SCHEMA_V5 = """
+CREATE TABLE devices (
+  id         INTEGER PRIMARY KEY,
+  name       TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,   -- SHA-256 of the gateway's token; the token itself is shown once and not kept
+  model      TEXT,
+  version    TEXT,
+  created    TEXT NOT NULL,
+  last_seen  TEXT,
+  last_ip    TEXT,
+  info       TEXT                    -- JSON: what it said about itself the last time it signed in
+);
+
+CREATE TABLE firmware (
+  id       INTEGER PRIMARY KEY,
+  model    TEXT NOT NULL,            -- the project name inside the image
+  version  TEXT NOT NULL,
+  file     TEXT NOT NULL,            -- in <data>/firmware
+  size     INTEGER NOT NULL,
+  sha256   TEXT NOT NULL,
+  uploaded TEXT NOT NULL,
+  note     TEXT,
+  UNIQUE (model, version)
+);
+
+CREATE TABLE positions (
+  device_id INTEGER NOT NULL,
+  t         REAL NOT NULL,           -- epoch seconds, from the satellites
+  lat       REAL NOT NULL,
+  lon       REAL NOT NULL,
+  speed_kmh REAL,
+  sats      REAL,
+  hdop      REAL,
+  PRIMARY KEY (device_id, t)
+);
+CREATE INDEX positions_t_idx ON positions (t);
+"""
+
+# Bus mode: one row per ride, from the picture of a person getting on to the picture of the same person getting off.
+SCHEMA_V6 = """
+CREATE TABLE rides (
+  id          INTEGER PRIMARY KEY,
+  state       TEXT NOT NULL,          -- onboard | done | unseen (the exit was never seen)
+  camera_id   INTEGER REFERENCES cameras(id) ON DELETE SET NULL,
+  entry_at    REAL NOT NULL,          -- epoch seconds
+  entry_lat   REAL,
+  entry_lon   REAL,
+  entry_image TEXT,                   -- relative to media_dir
+  entry_crop  TEXT,
+  exit_at     REAL,
+  exit_lat    REAL,
+  exit_lon    REAL,
+  exit_image  TEXT,
+  exit_crop   TEXT,
+  last_seen   REAL NOT NULL,
+  embedding   BLOB,                   -- the face as numbers: kept only while the person is on board
+  shots       INTEGER NOT NULL DEFAULT 1,
+  face_px     INTEGER,
+  similarity  REAL,                   -- how alike the face at the exit was to the one at the entry (0..1)
+  distance_km REAL,
+  fare        REAL,
+  note        TEXT
+);
+CREATE INDEX rides_state_idx ON rides (state, entry_at);
+CREATE INDEX rides_entry_idx ON rides (entry_at);
+"""
+
+MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6]
 
 
 def now_iso() -> str:

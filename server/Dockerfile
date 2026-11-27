@@ -21,6 +21,16 @@ ARG PB_OCR=cct-s-v2-global-model
 ENV PB_DETECTOR=${PB_DETECTOR} PB_OCR=${PB_OCR}
 RUN python -c "from fast_alpr import ALPR; ALPR(detector_model='${PB_DETECTOR}', ocr_model='${PB_OCR}'); print('models cached')"
 
+# The two face models for bus mode (OpenCV zoo: YuNet, MIT; SFace, Apache-2.0), checked against known SHA-256 sums.
+USER root
+RUN mkdir -p /opt/platebox/models && cd /opt/platebox/models \
+ && python -c "import urllib.request as u, hashlib, sys; \
+files={'face_detection_yunet_2023mar.onnx':('face_detection_yunet','8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4'), \
+'face_recognition_sface_2021dec.onnx':('face_recognition_sface','0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79')}; \
+[ (u.urlretrieve('https://github.com/opencv/opencv_zoo/raw/main/models/%s/%s' % (d, n), n), \
+   sys.exit('wrong checksum: ' + n) if hashlib.sha256(open(n,'rb').read()).hexdigest() != s else print('ok', n)) for n,(d,s) in files.items() ]"
+USER platebox
+
 COPY --chown=platebox:platebox platebox ./platebox
 
 ENV PLATEBOX_SERVER=1 \

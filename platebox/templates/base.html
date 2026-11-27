@@ -13,9 +13,11 @@
     <a class="brand" href="/"><b>Plate<i>Box</i></b><span>by Icetronix</span></a>
     {% if nav %}
     <nav>
-      <a href="/" class="{{ 'on' if active == 'plates' }}">Plates</a>
+      {% if bus_mode %}<a href="/passengers" class="{{ 'on' if active == 'passengers' }}">Passengers</a>{% endif %}
+      <a href="/?plates=1" class="{{ 'on' if active == 'plates' }}">Plates</a>
       <a href="/motion" class="{{ 'on' if active == 'motion' }}">Motion</a>
       {% if not cfg.server_mode %}<a href="/live" class="{{ 'on' if active == 'live' }}">Live</a>{% endif %}
+      <a href="/gateways" class="{{ 'on' if active == 'gateways' }}">Gateways</a>
       <a href="/settings" class="{{ 'on' if active == 'settings' }}">Settings</a>
       <form method="post" action="/logout"><button class="link" type="submit">Sign out</button></form>
     </nav>

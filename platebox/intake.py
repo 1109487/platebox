@@ -59,6 +59,9 @@ class Intake:
     def __init__(self, cfg: Config, db: Db, reader: Reader, sightings: Sightings, motion=None) -> None:
         self.cfg, self.db, self.reader, self.sightings = cfg, db, reader, sightings
         self.motion = motion                  # the motion log, if there is one
+        self.bus_mode = lambda: False         # True on a bus: the pictures are of passengers, not of number plates
+        self.faces = None
+        self.passengers = None
         self.skip_uploads = lambda: False     # True while the stream watcher is working: the camera's own uploads are redundant
         self.clock = CameraClock(db, enabled=not cfg.fake_net)   # the camera's own clock: old picture or new?
         self._last_prune = 0.0
@@ -244,6 +247,12 @@ class Intake:
             if first:
                 self.db.event("first_picture", serial)
             cam_time = camera_time_from_path(str(c.path.relative_to(self.cfg.intake_dir)))
+            if self.bus_mode() and self.faces is not None and self.passengers is not None:
+                with READ_LOCK:
+                    found = self.faces.faces(img)
+                # c.mtime is when the picture finished arriving: the fallback when the camera's own clock is unusable.
+                done = self.passengers.process(camera_id, serial, found, jpeg, cam_time, received=c.mtime)
+                return any(d["what"] in ("boarded", "left") for d in done)
             with READ_LOCK:
                 reads = self.reader.read(img)
             kept: list[str] = []

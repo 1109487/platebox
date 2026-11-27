@@ -102,6 +102,59 @@ Things to know:
 
 Without Docker, for a test on any computer: `PLATEBOX_SERVER=1 PLATEBOX_PUBLIC_HOST=<name> PLATEBOX_PORT=8090 python -m platebox`.
 
+## Gateways and firmware over the air
+
+A gateway (`firmware/gateway`: ESP32-S3, W5500, 4G modem, GNSS) is the 4G box between a camera and this server.
+
+1. **Gateways → Add a gateway.** The page shows a token once. On the gateway's console type
+   `server host <this server's name>` and `server token <the token>`.
+2. The gateway signs in over HTTPS about once an hour (`ota check` does it at once): firmware version, signal,
+   position. The page shows when each one last signed in.
+3. **Gateways → Firmware → Upload** the new `build/ba-gateway.bin`. Its name and version are read from the file
+   (raise `PROJECT_VER` in the gateway's `CMakeLists.txt` for every build; the same version is refused twice).
+4. At its next sign-in each gateway downloads it into the spare half of its flash, checks the SHA-256 the server
+   gave, and restarts into it. The new firmware is **on trial**: it must sign in once to be kept. If it cannot within
+   15 minutes, the gateway restarts into the firmware it had before.
+
+The gateway API (`/device/v1/checkin`, `/device/v1/firmware/<id>`, `/device/v1/positions`) accepts only a gateway's
+token, and slows down wrong ones. Firmware is not signed: what protects it is HTTPS to your own server, the token and
+the checksum. Whoever can sign in to this page can put firmware on your gateways, so keep that password strong.
+
+## Bus mode: passengers, distance and fare
+
+**Settings → What this records → Bus passengers.** One mode at a time: every picture the camera sends is then read
+for faces instead of number plates, and the gateway is told at its next sign-in and reports its position every 5 s.
+
+```
+ door camera ──► gateway ──► server:  face at the door ──► nobody like it on board  → a ride starts (position A)
+                    └ position every 5 s                 ──► like somebody on board   → that ride ends  (position B)
+                                                              distance along the reported route A→B → fare
+```
+
+* **Passengers page:** on board now, rides finished, distance and fares for the last 24 hours; for each ride the face
+  at the entry and at the exit, both positions (linked to a map), kilometres, minutes, fare and how alike the two faces
+  were. CSV export. *Last stop: everybody off* closes every open ride where the bus is.
+* **Fare** = starting fare + fare per kilometre × distance, rounded. Both are in Settings.
+* **Two doors:** tell each camera whether it is the entry or the exit door (Passengers → Doors). The entry camera then
+  only starts rides and the exit camera only ends them.
+* **Late pictures:** a picture is placed on the route by the camera's own clock (from its file name), not by when it
+  arrived, so a gap in coverage does not move it. Keep the camera's clock right and set its offset from UTC in Settings.
+* **Models:** OpenCV's YuNet (finds faces) and SFace (compares them), on the CPU. The server image downloads both when
+  it is built. Elsewhere put the two `.onnx` files in a folder and set `PLATEBOX_FACE_MODELS` to it.
+
+What it cannot do, and what to check before relying on it:
+
+* **It makes mistakes.** Two strangers can look alike to it (one ends the other's ride), and a person can be missed on
+  the way out (scarf, mask, looking away, a crowd at the door): that ride is closed as *exit not seen* after the longest
+  ride time, with no fare. The *match* number on each ride and the threshold in Settings are there to tune this on your
+  own buses. It has not been measured on real passengers yet.
+* **It does not know who a person is**, so by itself it cannot charge anybody. A fare needs something that identifies
+  the payer (a card, a QR ticket, an account) tied to the ride.
+* **Faces are personal data.** The numbers describing a face are kept only while the person is on board and deleted when
+  the ride ends; the pictures are kept for the retention time in Settings (30 days by default). Passengers must be told,
+  and in India the Digital Personal Data Protection Act applies: take legal advice before a public roll-out.
+* **No position, no fare.** The gateway's satellite antenna needs a view of the sky.
+
 ## Install it on a Windows computer (one Setup.exe)
 
 `PlateBox-Setup-<version>.exe` contains everything: Python, every library, the plate models, the camera

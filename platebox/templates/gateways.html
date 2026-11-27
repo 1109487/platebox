@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Gateways · PlateBox{% endblock %}
+{% block page %}gateways{% endblock %}
+{% block body %}
+<h1>Gateways</h1>
+<p class="muted">A gateway is the 4G box between a camera and this server. It signs in here about once an hour, says how it is,
+  and takes new firmware from here by itself.</p>
+{% if saved %}<p class="msg good">{{ saved }}</p>{% endif %}
+{% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
+
+{% if new_token %}
+<section class="card">
+  <h2>Token for {{ new_name }}</h2>
+  <p><b>Copy it now.</b> It is shown only this once; the server keeps no copy it could show again.</p>
+  <p class="mono" data-copy id="new-token">{{ new_token }}</p>
+  <p>On the gateway's console (its USB cable, 115200 baud) type these two lines, then <span class="mono">ota check</span>:</p>
+  <pre class="mono">server host {{ host }}
+server token {{ new_token }}</pre>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Your gateways</h2>
+  {% if gateways %}
+  <table class="kv wide">
+    <tr><th>Name</th><th>Firmware</th><th>Last signed in</th><th>4G</th><th>Position</th><th></th></tr>
+    {% for g in gateways %}
+    <tr>
+      <td>{{ g.name }}</td>
+      <td>{{ g.version or 'not seen yet' }}{% if g.waiting %}<br><small class="muted">{{ g.waiting.version }} is waiting for it</small>{% endif %}</td>
+      <td>{% if g.last_seen %}<time data-utc="{{ g.last_seen }}">{{ g.last_seen }}</time>{% else %}never{% endif %}</td>
+      <td>{% if g.info.signal_dbm is defined %}{{ g.info.signal_dbm }} dBm{% endif %} {{ g.info.carrier or '' }}{% if g.info.link %}<br><small class="muted">over {{ g.info.link }}</small>{% endif %}</td>
+      <td>{% if g.info.fix %}{{ '%.5f'|format(g.info.lat) }}, {{ '%.5f'|format(g.info.lon) }}{% else %}<span class="muted">no fix</span>{% endif %}</td>
+      <td>
+        <form method="post" action="/gateways/{{ g.id }}/token" class="inline" onsubmit="return confirm('The gateway stops signing in until you type the new token on its console. Continue?')"><button class="link" type="submit">New token</button></form>
+        <form method="post" action="/gateways/{{ g.id }}/remove" class="inline" onsubmit="return confirm('Remove this gateway and its recorded positions?')"><button class="link" type="submit">Remove</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">None yet.</p>{% endif %}
+  <form method="post" action="/gateways/add">
+    <label>Add a gateway
+      <input name="name" maxlength="60" placeholder="A name you will recognise, for example: Gate 1, or Bus MH12 AB 1234" required>
+    </label>
+    <button class="primary" type="submit">Add and show its token</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Firmware</h2>
+  <p>Upload the gateway's new program (<span class="mono">build/ba-gateway.bin</span>). Its name and version are read from the
+    file itself. Every gateway of that kind then updates itself at its next sign-in, and goes back to its old program by
+    itself if the new one does not start properly.</p>
+  <form method="post" action="/gateways/firmware" enctype="multipart/form-data">
+    <label>Firmware file
+      <input type="file" name="file" accept=".bin" required>
+    </label>
+    <label>Note (optional)
+      <input name="note" maxlength="200" placeholder="What changed">
+    </label>
+    <button class="primary" type="submit">Upload</button>
+  </form>
+  {% if firmware %}
+  <table class="kv wide">
+    <tr><th>For</th><th>Version</th><th>Uploaded</th><th>Size</th><th>Note</th><th></th></tr>
+    {% for f in firmware %}
+    <tr>
+      <td>{{ f.model }}</td><td>{{ f.version }}{% if loop.first or f.model != firmware[loop.index0 - 1].model %} <small class="muted">(current)</small>{% endif %}</td>
+      <td><time data-utc="{{ f.uploaded }}">{{ f.uploaded }}</time></td>
+      <td>{{ (f.size / 1024)|round|int }} KB</td><td>{{ f.note or '' }}</td>
+      <td><form method="post" action="/gateways/firmware/{{ f.id }}/remove" class="inline" onsubmit="return confirm('Delete this firmware file?')"><button class="link" type="submit">Delete</button></form></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Passengers · PlateBox{% endblock %}
+{% block page %}passengers{% endblock %}
+{% block body %}
+<h1>Passengers</h1>
+{% if saved %}<p class="msg good">{{ saved }}</p>{% endif %}
+{% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
+{% if not bus %}
+<p class="msg">This installation is recording <b>number plates</b>. To record bus passengers instead, change
+  <i>What this records</i> in <a href="/settings#mode">Settings</a>.</p>
+{% endif %}
+{% if bus and not faces_ready %}<p class="msg bad">Faces cannot be read: {{ faces_error }}</p>{% endif %}
+{% if bus and not latest %}
+<p class="msg bad"><b>No position has arrived from a gateway yet.</b> Rides are recorded, but without a place, a distance or a
+  fare. Check the gateway on the <a href="/gateways">Gateways</a> page: it must be signed in, and its satellite antenna must see the sky.</p>
+{% endif %}
+
+<section class="card">
+  <table class="kv wide">
+    <tr><th>On board now</th><th>Boarded, last 24 h</th><th>Rides finished</th><th>Exit not seen</th><th>Distance</th><th>Fares</th></tr>
+    <tr>
+      <td><b>{{ summary.onboard }}</b></td><td>{{ summary.boarded_24h }}</td><td>{{ summary.finished_24h }}</td>
+      <td>{{ summary.unseen_24h }}</td><td>{{ summary.km_24h }} km</td><td>{{ money }} {{ summary.fare_24h }}</td>
+    </tr>
+  </table>
+  {% if summary.no_position_24h %}<p class="muted small">{{ summary.no_position_24h }} boarding(s) in the last 24 h had no position (no satellite fix, or the gateway was not reporting).</p>{% endif %}
+  {% if summary.exits_unmatched %}<p class="muted small">{{ summary.exits_unmatched }} time(s) somebody was seen leaving who had not been seen boarding.</p>{% endif %}
+  <p>
+    <a class="button {{ 'primary' if not state }}" href="/passengers">All</a>
+    <a class="button {{ 'primary' if state == 'onboard' }}" href="/passengers?state=onboard">On board</a>
+    <a class="button {{ 'primary' if state == 'done' }}" href="/passengers?state=done">Finished</a>
+    <a class="button {{ 'primary' if state == 'unseen' }}" href="/passengers?state=unseen">Exit not seen</a>
+    <a class="button ghost" href="/passengers/export.csv">Download as a spreadsheet (CSV)</a>
+  </p>
+  <form method="post" action="/passengers/close-all" class="inline" onsubmit="return confirm('End every ride that is still open, here and now? Use this at the last stop.')">
+    <button type="submit" class="ghost">Last stop: everybody off</button>
+  </form>
+</section>
+
+{% if rides %}
+<section class="card">
+  <table class="kv wide rides">
+    <tr><th>Got on</th><th>Where</th><th>Got off</th><th>Where</th><th>Ride</th><th>Fare</th><th></th></tr>
+    {% for r in rides %}
+    <tr>
+      <td>
+        {% if r.entry_crop %}<a href="/rides/{{ r.id }}/entry.jpg" target="_blank" rel="noopener"><img class="face" src="/rides/{{ r.id }}/entry-face.jpg" alt="Face at the entry" width="72" height="72" loading="lazy"></a>{% endif %}
+        <br><time data-utc="{{ r.entry_iso }}">{{ r.entry_iso }}</time>
+      </td>
+      <td>{% if r.entry_lat is not none %}<a href="https://www.openstreetmap.org/?mlat={{ r.entry_lat }}&amp;mlon={{ r.entry_lon }}#map=17/{{ r.entry_lat }}/{{ r.entry_lon }}" target="_blank" rel="noopener">{{ '%.5f'|format(r.entry_lat) }}, {{ '%.5f'|format(r.entry_lon) }}</a>{% else %}<span class="muted">no position</span>{% endif %}</td>
+      <td>
+        {% if r.state == 'onboard' %}<span class="muted">on board</span>
+        {% elif r.state == 'unseen' %}<span class="muted">exit not seen</span>
+        {% else %}
+          {% if r.exit_crop %}<a href="/rides/{{ r.id }}/exit.jpg" target="_blank" rel="noopener"><img class="face" src="/rides/{{ r.id }}/exit-face.jpg" alt="Face at the exit" width="72" height="72" loading="lazy"></a><br>{% endif %}
+          <time data-utc="{{ r.exit_iso }}">{{ r.exit_iso }}</time>
+        {% endif %}
+      </td>
+      <td>{% if r.exit_lat is not none %}<a href="https://www.openstreetmap.org/?mlat={{ r.exit_lat }}&amp;mlon={{ r.exit_lon }}#map=17/{{ r.exit_lat }}/{{ r.exit_lon }}" target="_blank" rel="noopener">{{ '%.5f'|format(r.exit_lat) }}, {{ '%.5f'|format(r.exit_lon) }}</a>{% elif r.state == 'done' %}<span class="muted">no position</span>{% endif %}</td>
+      <td>{% if r.distance_km is not none %}<b>{{ '%.2f'|format(r.distance_km) }} km</b>{% endif %}{% if r.minutes is not none %}<br><small class="muted">{{ r.minutes }} min</small>{% endif %}
+        {% if r.similarity %}<br><small class="muted" title="How alike the two faces are. 1.00 is identical.">match {{ '%.2f'|format(r.similarity) }}</small>{% endif %}
+        {% if r.note %}<br><small class="muted">{{ r.note }}</small>{% endif %}</td>
+      <td>{% if r.fare is not none %}<b>{{ money }} {{ r.fare|int }}</b>{% elif r.state == 'done' %}<span class="muted">no distance</span>{% endif %}</td>
+      <td><form method="post" action="/passengers/{{ r.id }}/delete" onsubmit="return confirm('Delete this ride and its pictures?')"><button class="link" type="submit">Delete</button></form></td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+{% else %}
+<section class="card"><p class="muted">No rides{{ ' like that' if state }} yet.</p></section>
+{% endif %}
+
+{% if bus and cameras %}
+<section class="card">
+  <h2>Doors</h2>
+  <p class="muted">A bus with one door for getting on and off needs nothing here. With a camera at each of two doors, say which is which:
+    the entry camera only ever starts rides and the exit camera only ever ends them, which makes mistakes rarer.</p>
+  {% for c in cameras %}
+  <form method="post" action="/passengers/camera-role" class="inline">
+    <input type="hidden" name="serial" value="{{ c.serial }}">
+    <label>Camera {{ c.serial }}
+      <select name="role">
+        <option value="both" {{ 'selected' if c.role == 'both' }}>One door: getting on and off</option>
+        <option value="entry" {{ 'selected' if c.role == 'entry' }}>Entry door only</option>
+        <option value="exit" {{ 'selected' if c.role == 'exit' }}>Exit door only</option>
+      </select>
+    </label>
+    <button type="submit">Save</button>
+  </form>
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}

@@ -9,6 +9,46 @@
 <p class="msg bad"><b>The box's address changed</b> from {{ cam.ip_told }} to {{ cam.ip_now }}. Set the camera's <i>Server address</i> to {{ cam.ip_now }}.</p>
 {% endif %}
 
+<section class="card" id="mode">
+  <h2>What this records</h2>
+  <form method="post" action="/settings/mode">
+    <label class="check"><input type="radio" name="mode" value="parking" {{ 'checked' if mode == 'parking' }}> <b>Vehicles</b>: number plates at a gate or in a car park</label>
+    <label class="check"><input type="radio" name="mode" value="bus" {{ 'checked' if mode == 'bus' }}> <b>Bus passengers</b>: who got on where and off where, the distance and the fare</label>
+    <label class="check"><input type="checkbox" name="consent" value="1" {{ 'checked' if mode == 'bus' }}> For bus passengers: people are told at the door that their face is recorded to work out the fare, and I am allowed to do this</label>
+    <button type="submit">Save</button>
+  </form>
+  <p class="muted small">One at a time: every picture the camera sends is read as the kind chosen here. The gateway is told at its next
+    sign-in and reports its position only for a bus. A face is turned into numbers that are kept only while that person is on
+    board; they are deleted when the ride ends.{% if not faces_ready %} <b>Bus mode is not available here: {{ faces_error }}</b>{% endif %}</p>
+</section>
+
+{% if mode == 'bus' %}
+<section class="card" id="bus">
+  <h2>Bus: fares and matching</h2>
+  <form method="post" action="/settings/bus">
+    <label>Starting fare <input name="fare_base" inputmode="decimal" value="{{ bus.fare_base|round(2) }}"></label>
+    <label>Fare for each kilometre <input name="fare_per_km" inputmode="decimal" value="{{ bus.fare_per_km|round(2) }}"></label>
+    <label>Currency <input name="fare_currency" maxlength="6" value="{{ bus.fare_currency }}"></label>
+    <label>How alike two faces must be to count as the same person (0.2 to 0.9)
+      <input name="face_threshold" inputmode="decimal" value="{{ bus.face_threshold }}">
+      <small>Higher: fewer strangers taken for the same person, but more people not recognised when they get off. The model's own line is 0.36.</small>
+    </label>
+    <label>Shortest ride, in seconds <input name="min_ride_s" inputmode="numeric" value="{{ bus.min_ride_s|int }}">
+      <small>Seen again sooner than this after boarding is still boarding, not getting off.</small></label>
+    <label>Longest ride, in hours <input name="max_ride_h" inputmode="decimal" value="{{ bus.max_ride_h }}">
+      <small>A ride still open after this is closed as "exit not seen".</small></label>
+    <label>The camera's clock: minutes ahead of UTC <input name="tz_minutes" inputmode="numeric" value="{{ bus.tz_minutes|int }}">
+      <small>India is 330. The camera's clock places every picture on the route, so keep it right (set NTP on the camera).</small></label>
+    <label>Keep rides and their pictures for this many days <input name="rides_retention_days" inputmode="numeric" value="{{ bus.rides_retention_days|int }}"></label>
+    <button type="submit">Save</button>
+  </form>
+  <form method="post" action="/settings/rides-clear" onsubmit="return confirm('Delete every ride and every face picture? This cannot be undone.')">
+    <p class="muted">{{ rides_total }} rides stored.</p>
+    <button type="submit" class="danger">Delete all rides</button>
+  </form>
+</section>
+{% endif %}
+
 <section class="card">
   <h2>Camera</h2>
   <table class="kv">
