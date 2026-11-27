@@ -1,0 +1,30 @@
+[Unit]
+Description=PlateBox web interface and plate reader
+After=network-online.target NetworkManager.service platebox-sftp.service
+Wants=network-online.target
+
+[Service]
+User=platebox
+Group=platebox
+WorkingDirectory=/opt/platebox
+Environment=PLATEBOX_DATA=/var/lib/platebox
+Environment=PLATEBOX_PORT=80
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/var/lib/platebox
+Environment="PLATEBOX_SFTP_PASSWORD_HELPER=sudo -n /usr/local/sbin/platebox-set-sftp-password"
+ExecStart=/opt/platebox/venv/bin/python -m platebox
+Restart=always
+RestartSec=3
+# Port 80 without being root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# NoNewPrivileges and ProtectSystem are deliberately NOT set: the two things this service
+# may ask root for (the camera account's password, restart/shut down) go through sudo,
+# which needs both.
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target

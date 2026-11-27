@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Plates · PlateBox{% endblock %}
+{% block page %}plates{% endblock %}
+{% block body %}
+{% if cam.ip_changed %}
+<div class="msg bad">
+  <b>The box's address changed</b> from {{ cam.ip_told }} to {{ cam.ip_now }}. The camera is still sending to the old one.
+  Change <i>Server address</i> on the camera to <b>{{ cam.ip_now }}</b> (<a href="/settings">see the settings</a>).
+</div>
+{% endif %}
+<div class="head">
+  <h1>Number plates</h1>
+  <form method="get" action="/" class="search">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search a number" aria-label="Search a number">
+  </form>
+  <a class="button" href="/export.csv">Download list</a>
+</div>
+<div id="list" data-q="{{ q }}">{% include "_plates.html" %}</div>
+{% endblock %}

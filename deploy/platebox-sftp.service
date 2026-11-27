@@ -1,0 +1,13 @@
+[Unit]
+Description=PlateBox SFTP receiver for the camera (one account, one folder)
+After=network.target
+
+[Service]
+ExecStartPre=/bin/mkdir -p /run/sshd
+ExecStartPre=/usr/sbin/sshd -t -f /etc/platebox/sshd_config
+ExecStart=/usr/sbin/sshd -D -e -f /etc/platebox/sshd_config
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

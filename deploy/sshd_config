@@ -1,0 +1,35 @@
+# PlateBox SFTP receiver: a SEPARATE sshd, listening only on the SFTP port, allowing one
+# account, which can do nothing but SFTP into one folder. The administrator's own SSH
+# (if enabled at all) is the system sshd on port 22 and is not touched.
+Port 2222
+ListenAddress 0.0.0.0
+HostKey /etc/platebox/ssh/ssh_host_ed25519_key
+HostKey /etc/platebox/ssh/ssh_host_rsa_key
+HostKey /etc/platebox/ssh/ssh_host_ecdsa_key
+PidFile /run/platebox-sshd.pid
+
+AllowUsers ftpcam
+PermitRootLogin no
+PasswordAuthentication yes
+PubkeyAuthentication no
+KbdInteractiveAuthentication no
+AuthenticationMethods password
+UsePAM yes
+MaxAuthTries 4
+LogLevel VERBOSE
+LoginGraceTime 20
+MaxStartups 5:50:20
+
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+PermitTunnel no
+PermitUserEnvironment no
+PrintMotd no
+Subsystem sftp internal-sftp
+
+Match User ftpcam
+    ChrootDirectory /srv/platebox-sftp
+    ForceCommand internal-sftp -u 0007
+    PermitTTY no
+    AllowTcpForwarding no

@@ -1,0 +1,42 @@
+# PlateBox on a server. From the plate-box folder:
+#   cp server/.env.example server/.env        (then put your server's name in it)
+#   docker compose --env-file server/.env -f server/docker-compose.yml up -d --build
+#   docker compose -f server/docker-compose.yml logs platebox | grep "Setup code"
+#
+# Open in the firewall: 80 and 443 (the page; Caddy gets the HTTPS certificate by itself) and 2222 (the camera).
+# The program's own web port is NOT published: the only way to the page is through Caddy, over HTTPS.
+name: platebox
+services:
+  platebox:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      PLATEBOX_PUBLIC_HOST: "${PLATEBOX_PUBLIC_HOST:?put the server's public name in server/.env}"
+      # Caddy is the only thing that can reach the web port (it is not published), so its word on the visitor's address is good.
+      PLATEBOX_TRUSTED_PROXY: "*"
+    volumes:
+      - platebox_data:/var/lib/platebox
+    ports:
+      - "2222:2222"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - platebox
+    environment:
+      PLATEBOX_PUBLIC_HOST: "${PLATEBOX_PUBLIC_HOST}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  platebox_data:
+  caddy_data:
+  caddy_config:

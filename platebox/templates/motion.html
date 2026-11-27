@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Motion log · PlateBox{% endblock %}
+{% block page %}motion{% endblock %}
+{% block body %}
+<div class="head">
+  <h1>Motion log</h1>
+  <form method="get" action="/motion" class="inline filter">
+    <label class="check"><input type="checkbox" name="plates" value="1" {{ 'checked' if plates_only }} onchange="this.form.submit()"> Only pictures with a plate</label>
+  </form>
+  <a class="button" href="/settings#motion">Size limit…</a>
+</div>
+<div id="list" data-q="{{ 'plates=1&' if plates_only else '' }}page={{ page }}">{% include "_motion.html" %}</div>
+{% endblock %}

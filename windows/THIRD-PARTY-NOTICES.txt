@@ -1,0 +1,23 @@
+PlateBox bundles the following third-party software. Each remains under its own licence.
+
+NEEDS A LICENCE REVIEW BEFORE PLATEBOX IS SOLD OR GIVEN TO OTHERS. This list is from the packages' own metadata
+and has not been checked by a lawyer. Two items matter most: ffmpeg (GPL: you must offer its source) and the
+plate-detection model (check the terms of the model and of the YOLOv9 code it came from).
+
+  Python                       Python Software Foundation licence
+  FastAPI, Starlette, Uvicorn  MIT / BSD
+  Jinja2, MarkupSafe, click    BSD
+  asyncssh                     Eclipse Public Licence 2.0
+  cryptography                 Apache-2.0 or BSD
+  OpenCV (headless)            Apache-2.0
+  ONNX Runtime                 MIT
+  NumPy                        BSD
+  fast-alpr, fast-plate-ocr,
+  open-image-models            MIT (the code); the downloaded model files have their own terms
+  YOLOv9-based plate detector  model "yolo-v9-t-384-license-plate-end2end" from open-image-models
+  ffmpeg.exe (live view)       GNU GPL v3. Build: "essentials" from https://www.gyan.dev/ffmpeg/builds/
+                               Licence text: ffmpeg\LICENSE.txt in the install folder.
+                               Source code: https://ffmpeg.org/download.html (and the build page above).
+  Inno Setup (installer)       Inno Setup licence (the installer itself is yours to distribute)
+
+Python packages carry their full licence texts inside this folder (see the .dist-info folders under _internal).

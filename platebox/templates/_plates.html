@@ -1,0 +1,46 @@
+{% macro when(t) -%}
+  {%- if t.cam_time -%}<time data-local="{{ t.cam_time }}">{{ t.cam_time }}</time>
+  {%- else -%}<time data-utc="{{ t.seen_at }}">{{ t.seen_at }}</time>{%- endif -%}
+{%- endmacro %}
+
+{% if not items %}
+  <div class="empty">
+    {% if q %}No plate matches “{{ q }}”.{% else %}
+    <h2>Waiting for the first vehicle</h2>
+    <p>When a vehicle with a readable number plate passes the camera, it appears here with its picture and the time.</p>
+    {% endif %}
+  </div>
+{% else %}
+  <p class="muted" id="counts" data-sig="{{ totals.sightings }}|{{ totals.last }}">
+    {{ total }} plate{{ '' if total == 1 else 's' }} · {{ totals.sightings }} sighting{{ '' if totals.sightings == 1 else 's' }}
+  </p>
+  <div class="plates">
+  {% for p in items %}
+    <article class="plate" data-plate="{{ p.plate }}">
+      <a class="shot" href="/media/{{ p.latest_id }}/full.jpg?v={{ p.token }}" target="_blank" rel="noopener" title="Open the full picture">
+        <img loading="lazy" src="/media/{{ p.latest_id }}/crop.jpg?v={{ p.token }}" alt="Plate {{ p.plate }}">
+      </a>
+      <div class="meta">
+        <div class="num">{{ p.plate }}</div>
+        <div class="badges">
+          {% if p.valid %}<span class="badge ok">Format OK</span>{% else %}<span class="badge warn" title="Does not look like an Indian registration; the reading may be wrong">Check the number</span>{% endif %}
+          <span class="badge">{{ p.count }} time{{ '' if p.count == 1 else 's' }}</span>
+          {% if p.plate_px %}<span class="badge" title="Width of the plate in the camera picture. About 400 or more reads reliably; under about 200 it often does not.">{{ p.plate_px }} px wide</span>{% endif %}
+          {% if p.confidence is not none %}<span class="badge">{{ (p.confidence * 100) | round | int }}% sure</span>{% endif %}
+        </div>
+        <div class="last">Last seen {{ when(p.times[0]) }}</div>
+        <details>
+          <summary>{{ 'All times' if p.count > 1 else 'Time' }} ({{ p.count }})</summary>
+          <ul class="times">
+            {% for t in p.times %}<li>{{ when(t) }}</li>{% endfor %}
+          </ul>
+        </details>
+        <form method="post" action="/plates/delete" class="del" onsubmit="return confirm('Delete {{ p.plate }} and its pictures?')">
+          <input type="hidden" name="plate" value="{{ p.plate }}">
+          <button class="link danger" type="submit">Delete</button>
+        </form>
+      </div>
+    </article>
+  {% endfor %}
+  </div>
+{% endif %}

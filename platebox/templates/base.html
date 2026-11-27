@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0c120d">
+  <title>{% block title %}PlateBox · Icetronix{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-page="{% block page %}{% endblock %}"{% if nav %} data-nav="1"{% endif %}>
+  <header class="bar">
+    <a class="brand" href="/"><b>Plate<i>Box</i></b><span>by Icetronix</span></a>
+    {% if nav %}
+    <nav>
+      <a href="/" class="{{ 'on' if active == 'plates' }}">Plates</a>
+      <a href="/motion" class="{{ 'on' if active == 'motion' }}">Motion</a>
+      {% if not cfg.server_mode %}<a href="/live" class="{{ 'on' if active == 'live' }}">Live</a>{% endif %}
+      <a href="/settings" class="{{ 'on' if active == 'settings' }}">Settings</a>
+      <form method="post" action="/logout"><button class="link" type="submit">Sign out</button></form>
+    </nav>
+    {% endif %}
+  </header>
+  {% if nav and not cfg.server_mode %}
+  <div id="alert" class="alert {{ guard.level if guard and guard.level != 'ok' }}" role="status" {% if not guard or guard.level == 'ok' %}hidden{% endif %}>
+    <div class="why"><strong id="alert-title">{{ guard.title if guard }}</strong><span id="alert-text">{{ guard.text if guard }}</span></div>
+    <button class="primary" id="alert-ack" type="button" {% if not guard or guard.level != 'bad' %}hidden{% endif %}>I have changed it on the camera</button>
+    <a class="button" id="alert-more" href="/settings#address" {% if not guard or guard.level == 'ok' %}hidden{% endif %}>Details</a>
+  </div>
+  {% endif %}
+  {% if watch_hint %}
+  <div class="alert fixed" role="status">
+    <div class="why"><strong>One more step makes this much more dependable</strong><span>Let PlateBox watch the camera's video itself. It then does not depend on the camera's own picture upload, its clock or the internet. It only needs the camera's user name and password, once.</span></div>
+    <a class="button primary" href="/settings#watch">Set it up</a>
+  </div>
+  {% endif %}
+  <main>{% block body %}{% endblock %}</main>
+  <footer>PlateBox {{ version }} · <a href="https://icetronix.in/" target="_blank" rel="noopener">Icetronix</a></footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

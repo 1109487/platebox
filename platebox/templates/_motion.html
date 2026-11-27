@@ -1,0 +1,47 @@
+{% macro when(t) -%}
+  {%- if t.cam_time -%}<time data-local="{{ t.cam_time }}">{{ t.cam_time }}</time>
+  {%- else -%}<time data-utc="{{ t.seen_at }}">{{ t.seen_at }}</time>{%- endif -%}
+{%- endmacro %}
+
+<div class="usage" data-sig="{{ stats.count }}|{{ stats.last }}">
+  <div class="bar" role="progressbar" aria-valuenow="{{ stats.percent }}" aria-valuemin="0" aria-valuemax="100"
+       aria-label="Space used by the motion log"><span style="width: {{ stats.percent }}%"></span></div>
+  <div class="muted small">
+    {{ stats.used_mb }} MB of {{ stats.cap_mb }} MB used · {{ stats.count }} picture{{ '' if stats.count == 1 else 's' }}.
+    When it is full, the oldest pictures are deleted first.
+  </div>
+</div>
+
+{% if not stats.enabled %}
+  <p class="msg warn">The motion log is switched off, so no new pictures are being kept. <a href="/settings">Turn it on in Settings.</a></p>
+{% endif %}
+
+{% if not items %}
+  <div class="empty">
+    {% if plates_only %}No picture with a plate yet.{% else %}
+    <h2>No movement recorded yet</h2>
+    <p>When something moves in front of the camera, a small picture and the time are kept here.</p>{% endif %}
+  </div>
+{% else %}
+  <div class="motion">
+    {% for e in items %}
+    <figure class="ev">
+      <a href="/motion/{{ e.id }}.jpg?v={{ e.token }}" target="_blank" rel="noopener" title="Open the picture">
+        <img loading="lazy" src="/motion/{{ e.id }}.jpg?v={{ e.token }}" alt="Movement at {{ e.cam_time or e.seen_at }}" width="{{ e.width }}" height="{{ e.height }}">
+      </a>
+      <figcaption>
+        {{ when(e) }}
+        {% for p in e.plates %}<span class="badge ok">{{ p }}</span>{% endfor %}
+      </figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% if pages > 1 %}
+  <p class="pager small">
+    {% set base = '/motion?plates=1&' if plates_only else '/motion?' %}
+    {% if page > 0 %}<a href="{{ base }}page={{ page - 1 }}">← Newer</a>{% endif %}
+    Page {{ page + 1 }} of {{ pages }}
+    {% if page + 1 < pages %}<a href="{{ base }}page={{ page + 1 }}">Older →</a>{% endif %}
+  </p>
+  {% endif %}
+{% endif %}

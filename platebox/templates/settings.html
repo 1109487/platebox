@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Settings · PlateBox{% endblock %}
+{% block page %}settings{% endblock %}
+{% block body %}
+<h1>Settings</h1>
+{% if saved %}<p class="msg good">{{ saved }}</p>{% endif %}
+{% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
+{% if cam.ip_changed %}
+<p class="msg bad"><b>The box's address changed</b> from {{ cam.ip_told }} to {{ cam.ip_now }}. Set the camera's <i>Server address</i> to {{ cam.ip_now }}.</p>
+{% endif %}
+
+<section class="card">
+  <h2>Camera</h2>
+  <table class="kv">
+    {% if not cfg.server_mode %}<tr><th>Camera</th><td>{{ cam.camera_label or 'Not chosen' }}{% if cam.camera_ip %} · {{ cam.camera_ip }}{% endif %}</td></tr>{% endif %}
+    <tr><th>Serial number</th><td>{{ cam.serial or 'Not seen yet' }}</td></tr>
+    <tr><th>Last picture</th><td>{% if cam.last_upload %}<time data-utc="{{ cam.last_upload }}">{{ cam.last_upload }}</time>{% else %}None yet{% endif %}</td></tr>
+    <tr><th>Pictures received</th><td>{{ cam.uploads }}</td></tr>
+  </table>
+  <h3>What the camera should be set to</h3>
+  {% if sftp %}
+  <table class="kv" id="kv">
+    <tr><th>Type</th><td data-copy>{{ sftp.protocol }}</td></tr>
+    <tr><th>Server address</th><td data-copy>{{ sftp.server }}</td></tr>
+    <tr><th>Port</th><td data-copy>{{ sftp.port }}</td></tr>
+    <tr><th>User name</th><td data-copy>{{ sftp.username }}</td></tr>
+    <tr><th>Password</th><td><span data-copy data-secret data-value="{{ sftp.password }}">••••••••</span> <button class="link" id="reveal">show</button></td></tr>
+    <tr><th>Remote directory</th><td data-copy>{{ sftp.directory }}</td></tr>
+  </table>
+  {% else %}<p class="muted">The box has no network address right now.</p>{% endif %}
+  {% if cfg.server_mode %}
+  <p class="muted">These never change when the camera moves to another site or another SIM: the camera always sends to this server.</p>
+  {% else %}
+  <p class="muted">The user name and password never change when you move the box to another network; only the server address does.</p>
+  <form method="post" action="/settings/camera" class="inline"><button type="submit">Find or change the camera…</button></form>
+  {% endif %}
+  <form method="post" action="/settings/sftp-password" onsubmit="return confirm('The camera will stop sending pictures until you enter the new password on it. Continue?')">
+    <label>Change the camera's password
+      <input name="password" autocomplete="off" placeholder="Type one you can easily type (8 to 32 letters and digits), or leave empty for a made-up one">
+    </label>
+    <button type="submit" class="ghost">Change the password</button>
+  </form>
+
+  {% if recv %}
+  <h3>Is the camera reaching this computer?</h3>
+  <p class="status {{ 'ok' if recv.diagnosis.level == 'ok' else ('bad' if recv.diagnosis.level == 'bad' else '') }}" id="diag">{{ recv.diagnosis.text }}</p>
+  {% if recv.events %}
+  <table class="kv small" id="events">
+    {% for e in recv.events %}<tr><th>{{ e.ago_s }} s ago</th><td>{{ e.ip }} {{ e.what }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+  <button type="button" id="recv-check">Check this computer's receiver now</button>
+  <button type="button" id="recv-trace" class="ghost">Record what the camera asks for (2 minutes)</button>
+  <a class="button ghost" href="/settings/support.txt" download>Download the support file</a>
+  <p id="recv-msg" class="msg" hidden></p>
+  <p class="muted small">For when something odd keeps happening: start the recording, wave in front of the camera, then download the support file and send it to whoever is helping. It holds addresses, times and file names, no passwords and no pictures.</p>
+  <p class="muted small">If the camera's own test says "Right verification failure", the box above says what really happened: nothing arrived (address, port, Save, firewall), a wrong password, or a wrong user name.</p>
+  {% endif %}
+</section>
+
+{% if not cfg.server_mode %}
+<section class="card" id="watch">
+  <h2>Watching the camera directly (recommended)</h2>
+  <p class="muted">PlateBox opens the camera's video itself, the same way the Live page does, notices movement and reads the plates. Nothing depends on the camera's own picture upload, its clock, its time or name lookups, or the internet: only that this computer can reach the camera. It is the most dependable way, and it needs the camera's user name and password once.</p>
+  <p class="status {{ 'ok' if watch.level == 'ok' else ('bad' if watch.level == 'bad' else '') }}" id="watch-state">{{ watch.text }}</p>
+  <form method="post" action="/settings/watch">
+    <label class="check"><input type="checkbox" name="enabled" value="1" {{ 'checked' if watch_on }}> Watch the camera's video (recommended)</label>
+    <label class="check"><input type="checkbox" name="ignore_uploads" value="1" {{ 'checked' if watch_ignore }}> While watching works, ignore the pictures the camera uploads by itself (they can be old ones it keeps re-sending)</label>
+    <label>Camera user name
+      <input name="username" autocomplete="off" value="{{ watch_user }}" placeholder="the user name you sign in to the camera's web page with">
+    </label>
+    <label>Camera password
+      <input type="password" name="password" autocomplete="new-password" placeholder="{{ 'leave empty to keep the one saved' if watch_user else 'the password you sign in to the camera with' }}">
+      <small>It stays on this computer. A view-only account on the camera is best.</small>
+    </label>
+    <label>How easily a movement counts (% of the picture that changes)
+      <input type="number" name="sensitivity" step="0.1" min="0.1" max="30" value="{{ '%g' % watch_sensitivity }}">
+      <small>Lower notices smaller movement (and more shadows and insects). The default 0.5 suits a person or a vehicle in view.</small>
+    </label>
+    <button type="submit" class="primary">Save and connect</button>
+    <button type="button" id="watch-test" class="ghost">Test the camera's login</button>
+  </form>
+  <p id="watch-msg" class="msg" hidden></p>
+</section>
+
+<section class="card" id="address">
+  <h2>Addresses: keeping the camera and this computer in touch</h2>
+  <p class="muted">The camera sends its pictures to a number you typed into it (<span class="mono" data-copy>{{ cam.ip_now or '…' }}</span> now).
+    On many networks the router hands out different numbers from time to time. If this computer's number changes, the camera keeps sending to the old one
+    and nothing arrives, while live view still works. PlateBox watches for this and, when it can, keeps the camera's number working by itself.</p>
+  <p id="addr-state" class="status {{ 'ok' if guard.level in ('ok', 'fixed') else 'bad' }}">{% if guard.level == 'ok' %}All good: the camera's address and this computer's address match.{% else %}{{ guard.title }}. {{ guard.text }}{% endif %}</p>
+  <table class="kv">
+    <tr><th>This computer's address</th><td>{{ cam.ip_now or '—' }}</td></tr>
+    <tr><th>The camera sends to</th><td>{{ cam.ip_told or '—' }}</td></tr>
+    <tr><th>The camera is at</th><td>{{ cam.camera_ip or '—' }}</td></tr>
+  </table>
+  <form method="post" action="/settings/address-guard">
+    <label class="check"><input type="checkbox" name="enabled" value="1" {{ 'checked' if box.guard.enabled() }}> Keep the camera working when this computer's address changes (recommended)</label>
+    <button type="submit">Save</button>
+  </form>
+  <details>
+    <summary>The lasting fix: give the camera and this computer fixed addresses</summary>
+    <ol class="how">
+      <li>Pick two unused numbers on the same network, outside the router's automatic range, for example <code>192.168.1.200</code> for this computer and <code>192.168.1.201</code> for the camera (mask <code>255.255.255.0</code>). Ask the router's owner for its range if you can.</li>
+      <li><b>This computer:</b> Windows Settings, Network &amp; internet, your Wi-Fi or Ethernet, IP assignment, Manual, IPv4: the address above, mask <code>255.255.255.0</code>, gateway the router's address.</li>
+      <li><b>The camera:</b> Setting, Network, TCP/IP, Static: its address, the same mask, the same gateway. Save.</li>
+      <li><b>The camera, FTP page:</b> Server Address is this computer's fixed address. Save, then test.</li>
+    </ol>
+    <p class="muted small">Better still, ask the router's owner to reserve those two addresses for this computer and the camera. Then neither needs setting by hand.</p>
+  </details>
+</section>
+
+<section class="card" id="offline">
+  <h2>No internet at this site?</h2>
+  <p class="muted">The camera pauses to look up a name and the time before it sends a picture. With no internet it waits about a minute, gives up, and nothing arrives, even though live view still works. PlateBox can answer those two lookups itself so the camera never waits.</p>
+  <p>Set these two things <b>on the camera</b> to this computer's address{% if offline_ip %} <span class="mono" data-copy>{{ offline_ip }}</span>{% endif %}:</p>
+  <ul class="how">
+    <li><b>DNS server</b>: camera page, <i>Setting → Network → TCP/IP</i>.</li>
+    <li><b>NTP (time) server</b>: camera page, <i>Setting → System → General → Date &amp; Time</i> (turn NTP on).</li>
+  </ul>
+  <p class="status {{ 'ok' if offline.listening.dns and offline.listening.ntp else ('bad' if offline.enabled else '') }}">
+    Name answers (DNS): {{ 'running' if offline.listening.dns else 'not running' }}{% if offline.errors.dns %}: {{ offline.errors.dns }}{% endif %}.
+    Time answers (NTP): {{ 'running' if offline.listening.ntp else 'not running' }}{% if offline.errors.ntp %}: {{ offline.errors.ntp }}{% endif %}.
+    {% if offline.recent %}<br>The camera has asked: {% for r in offline.recent %}{{ r.what }} ({{ r.ago_s }} s ago){{ ', ' if not loop.last }}{% endfor %}.{% endif %}
+  </p>
+  <form method="post" action="/settings/offline-helper">
+    <label class="check"><input type="checkbox" name="enabled" value="1" {{ 'checked' if offline.enabled }}> Answer the camera's name and time requests (recommended)</label>
+    <button type="submit">Save</button>
+  </form>
+  <p class="muted small">PlateBox only answers: it never sends a question on to anywhere else. While you are testing, also switch off <i>Auto Connect</i> and <i>Access Platform</i> under <i>Setting → Network</i> on the camera; they only talk to the maker's cloud.</p>
+</section>
+
+<section class="card">
+  <h2>Network</h2>
+  <table class="kv">
+    <tr><th>Connection</th><td>{% if net.connected %}{{ 'Wi-Fi ' + (net.ssid or '') if net.kind == 'wifi' else ('Cable' if net.kind == 'ethernet' else 'Setup hotspot') }}{% else %}Not connected{% endif %}</td></tr>
+    <tr><th>Address</th><td>{{ net.ip or '—' }}</td></tr>
+    <tr><th>Name</th><td>{{ cfg.hostname }}.local</td></tr>
+  </table>
+  <form method="post" action="/settings/network" class="inline"><button type="submit">Change the Wi-Fi…</button></form>
+  <p class="muted">The camera must be on the same network as the box. After changing it, find the camera again and update its server address.</p>
+</section>
+
+{% endif %}
+<section class="card" id="motion">
+  <h2>Motion log</h2>
+  <p class="muted">A small picture and the time, every time something moves in front of the camera. It only ever takes the space you allow here: when it is full, the <b>oldest</b> pictures are deleted first.</p>
+  <div class="usage"><div class="bar" role="progressbar" aria-valuenow="{{ motion.percent }}" aria-valuemin="0" aria-valuemax="100" aria-label="Space used by the motion log"><span style="width: {{ motion.percent }}%"></span></div>
+    <div class="muted small">{{ motion.used_mb }} MB of {{ motion.cap_mb }} MB used · {{ motion.count }} picture{{ '' if motion.count == 1 else 's' }}</div></div>
+  <form method="post" action="/settings/motion">
+    <label class="check"><input type="checkbox" name="enabled" value="1" {{ 'checked' if motion.enabled }}> Keep a motion log</label>
+    <label>Size limit (MB)
+      <input type="number" name="max_mb" min="{{ motion_limits[0] }}" max="{{ motion_limits[1] }}" value="{{ motion.cap_mb }}" required>
+      <small>{{ motion_limits[0] }} to {{ motion_limits[1] }}. About 20 pictures per MB. Lowering it deletes the oldest pictures at once.</small>
+    </label>
+    <label>At most one picture every (seconds)
+      <input type="number" name="interval_s" min="0" max="600" value="{{ motion.interval_s }}" required>
+      <small>The camera sends a picture about every second while something moves. Pictures with a plate are always kept.</small>
+    </label>
+    <button type="submit">Save</button>
+  </form>
+  <form method="post" action="/motion/clear" class="inline" onsubmit="return confirm('Delete every motion picture?')"><button type="submit" class="danger">Delete the motion log</button></form>
+</section>
+
+<section class="card">
+  <h2>Reading</h2>
+  <form method="post" action="/settings/reading">
+    <label>Smallest confidence to record
+      <input type="number" name="min_confidence" step="0.05" min="0.2" max="0.99" value="{{ '%.2f' % reading.min_confidence }}">
+      <small>Lower records more, with more wrong numbers. Higher misses faint plates.</small>
+    </label>
+    <label>One vehicle, one sighting: merge pictures within (seconds)
+      <input type="number" name="dedupe_seconds" min="0" max="600" value="{{ reading.dedupe_seconds }}">
+    </label>
+    <label>Keep sightings for (days, 0 = forever)
+      <input type="number" name="retention_days" min="0" max="3650" value="{{ reading.retention_days }}">
+    </label>
+    <label>Ignore pictures the camera took more than (minutes) ago (0 = keep all)
+      <input type="number" name="stale_minutes" min="0" max="1440" value="{{ reading.stale_minutes }}">
+      <small>A camera that missed some uploads sends those old pictures again when it reconnects. They are not new movement, so PlateBox ignores them{% if reading.stale_ignored %} ({{ reading.stale_ignored }} ignored so far){% endif %}. A picture with exactly the same content as one already read is always ignored{% if reading.repeat_ignored %} ({{ reading.repeat_ignored }} so far){% endif %}. It goes by the camera's own clock, so keep that clock right.{% if reading.clock_note %} <b>{{ reading.clock_note }}</b>{% endif %}</small>
+    </label>
+    <label class="check"><input type="checkbox" name="strict_format" value="1" {{ 'checked' if reading.strict_format }}> Only record numbers that look like an Indian registration</label>
+    <p class="muted small">Recommended. It stops the camera's own on-screen name and clock, and other text, from being recorded as a plate.
+      Untick it for foreign or unusual plates (you will then see more wrong numbers marked "Check the number").</p>
+    <button type="submit">Save</button>
+  </form>
+  {% if reading.invalid_count %}
+  <form method="post" action="/settings/clean-invalid" class="inline" onsubmit="return confirm('Remove {{ reading.invalid_count }} entries marked Check the number, and their pictures?')">
+    <button type="submit" class="ghost">Remove the {{ reading.invalid_count }} entr{{ 'y' if reading.invalid_count == 1 else 'ies' }} marked "Check the number"</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Administrator password</h2>
+  <form method="post" action="/settings/password">
+    <label>Current password <input type="password" name="current" autocomplete="current-password" required></label>
+    <label>New password <input type="password" name="password" autocomplete="new-password" required></label>
+    <label>New password again <input type="password" name="confirm" autocomplete="new-password" required></label>
+    <button type="submit">Change password</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>The box</h2>
+  <p class="muted">{{ totals.sightings }} sightings of {{ totals.plates }} plates stored.</p>
+  {% if not cfg.server_mode %}
+  <form method="post" action="/settings/reboot" class="inline"><button type="submit" class="ghost">Restart</button></form>
+  <form method="post" action="/settings/poweroff" class="inline" onsubmit="return confirm('Shut the box down?')"><button type="submit" class="ghost">Shut down</button></form>
+  {% endif %}
+  <form method="post" action="/settings/clear" class="inline" onsubmit="return confirm('Delete every sighting and picture? This cannot be undone.')"><button type="submit" class="danger">Delete all plates</button></form>
+</section>
+{% endblock %}

@@ -1,0 +1,31 @@
+# Run PlateBox on a development PC:  docker compose -f dev/docker-compose.yml up
+# Web interface on http://localhost:8088, SFTP receiver on port 2222.
+# Set ADVERTISE_IP to this PC's address on the camera's network (what the camera should connect to).
+name: platebox-dev
+services:
+  platebox:
+    image: platebox-dev
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile
+    working_dir: /opt/platebox
+    command: ["sh", "/opt/platebox/dev/entrypoint.sh"]
+    environment:
+      PLATEBOX_FAKE_NET: "1"
+      PLATEBOX_SFTP: "${SFTP_MODE:-system}"
+      PLATEBOX_SFTP_DEBUG: "${SFTP_DEBUG:-}"
+      PLATEBOX_ADVERTISE_IP: "${ADVERTISE_IP:-}"
+      PLATEBOX_SFTP_PASSWORD_HELPER: "sh /opt/platebox/deploy/set-sftp-password.sh"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ..:/opt/platebox
+      - platebox_data:/var/lib/platebox
+      - platebox_sftp:/srv/platebox-sftp
+      - platebox_ssh:/etc/platebox/ssh
+    ports:
+      - "8088:80"
+      - "2222:2222"
+volumes:
+  platebox_data:
+  platebox_sftp:
+  platebox_ssh:

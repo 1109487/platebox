@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Set up · PlateBox{% endblock %}
+{% block page %}setup{% endblock %}
+{% block body %}
+{% if cfg.server_mode %}
+{% set order = ['claim', 'configure', 'done'] %}
+{% set labels = ['Password', 'Connect the camera', 'Done'] %}
+{% else %}
+{% set order = ['claim', 'network', 'camera', 'configure', 'done'] %}
+{% set labels = ['Password', 'Network', 'Camera', 'Connect', 'Done'] %}
+{% endif %}
+<ol class="steps" aria-label="Setup progress">
+  {% for s in order %}
+  <li class="{{ 'done' if order.index(s) < order.index(step) else ('now' if s == step else '') }}">
+    <span>{{ loop.index }}</span> {{ labels[loop.index0] }}
+  </li>
+  {% endfor %}
+</ol>
+
+<div id="setup" data-step="{{ step }}">
+
+{% if step == 'claim' %}
+<section class="card narrow">
+  <h1>Welcome</h1>
+  <p>{{ 'This server' if cfg.server_mode else 'This box' }} reads number plates from your camera. Set it up in a few minutes.</p>
+  {% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
+  <form method="post" action="/setup/claim">
+    <label>Setup code
+      <input name="code" inputmode="numeric" autocomplete="off" placeholder="6 digits" required autofocus>
+      <small>{% if cfg.server_mode %}Shown in the server's log when it starts, and saved in the file setup-code.txt in its data folder.{% else %}Printed on the label on the box.{% endif %}</small>
+    </label>
+    <label>Choose an administrator password
+      <input type="password" name="password" minlength="{{ min_password }}" autocomplete="new-password" required>
+      <small>At least {{ min_password }} characters. This is the only account.</small>
+    </label>
+    <label>Type it again
+      <input type="password" name="confirm" minlength="{{ min_password }}" autocomplete="new-password" required>
+    </label>
+    <button class="primary" type="submit">Continue</button>
+  </form>
+</section>
+
+{% elif step == 'network' %}
+<section class="card">
+  <h1>Connect the box to the camera's network</h1>
+  <p>The box and the camera must be on the <b>same network</b> (the same router or Wi-Fi).</p>
+  <div id="netstatus" class="status wait">Checking the network…</div>
+  <div id="netactions" hidden>
+    <button class="primary" id="net-continue">Use this network and continue</button>
+    <button id="net-change" class="ghost">Join a different Wi-Fi</button>
+  </div>
+  <div id="wifi" hidden>
+    <h2>Wi-Fi networks</h2>
+    <ul id="wifilist" class="list"></ul>
+    <button id="wifi-rescan" class="ghost">Scan again</button>
+    <form id="wifiform" hidden>
+      <label><span id="wifiname"></span>
+        <input type="password" id="wifipass" autocomplete="off" placeholder="Wi-Fi password">
+      </label>
+      <button class="primary" type="submit">Connect</button>
+    </form>
+    <p id="wifimsg" class="msg" hidden></p>
+  </div>
+</section>
+
+{% elif step == 'camera' %}
+<section class="card">
+  <h1>Find the camera</h1>
+  <p>Make sure the camera is powered and plugged into the same network as this box.</p>
+  <button class="primary" id="cam-search">Search for the camera</button>
+  <div id="camstatus" class="status" hidden></div>
+  <ul id="camlist" class="list"></ul>
+  <details>
+    <summary>Enter the camera's address by hand</summary>
+    <form id="cam-manual">
+      <label>Camera IP address
+        <input id="cam-ip" inputmode="decimal" placeholder="192.168.1.64" pattern="\d{1,3}(\.\d{1,3}){3}" required>
+      </label>
+      <button type="submit">Use this address</button>
+    </form>
+  </details>
+  <p class="small"><button class="link" id="back-network">← Back to the network</button></p>
+</section>
+
+{% elif step == 'configure' %}
+<section class="card">
+  <h1>Tell the camera where to send pictures</h1>
+  <div id="ipwarn" class="msg bad" hidden>The box's address has changed. Use the new settings below.</div>
+  {% if cfg.server_mode %}
+  <p>The camera sends its pictures to this server over the internet (for example through the 4G gateway).
+    Open the camera's own web page from a computer at the site and sign in. Then:</p>
+  {% if not cfg.public_host %}<p class="msg bad">This server has not been told its own public name, so the
+    <i>Server address</i> below may be wrong. Set <span class="mono">PLATEBOX_PUBLIC_HOST</span> and restart it.</p>{% endif %}
+  {% else %}
+  <p>Open the camera's web page <a id="camlink" href="#" target="_blank" rel="noopener"></a> and sign in. Then:</p>
+  {% endif %}
+  <ol class="how">
+    <li><b>Storage → Destination → FTP.</b> Tick <i>Enable</i> and enter these, then press <b>Save</b>, then <b>test</b>:
+      <table class="kv" id="kv">
+        <tr><th>Type</th><td data-k="protocol" data-copy>SFTP</td></tr>
+        <tr><th>Server address</th><td data-k="server" data-copy>…</td></tr>
+        <tr><th>Port</th><td data-k="port" data-copy>…</td></tr>
+        <tr><th>User name</th><td data-k="username" data-copy>…</td></tr>
+        <tr><th>Password</th><td><span data-k="password" data-copy data-secret>••••••••</span> <button class="link" id="reveal">show</button></td></tr>
+        <tr><th>Remote directory</th><td data-k="directory" data-copy>…</td></tr>
+      </table>
+    </li>
+    <li><b>Storage → Destination → Path.</b> In the <i>Snapshot</i> row tick <b>Event</b> (FTP). Save.</li>
+    <li><b>Event → Video Detection.</b> Tick <i>Enable</i> and <i>Snapshot</i>. Save.</li>
+  </ol>
+  {% if cfg.server_mode %}
+  <details class="card inner">
+    <summary><b>Sending over 4G?</b> Three camera settings that keep it quick</summary>
+    <ul class="how">
+      <li><b>Gateway and DNS</b>: <i>Setting → Network → TCP/IP</i>. The gateway is the 4G gateway's address; set a DNS server
+        (for example 8.8.8.8) if the <i>Server address</i> above is a name and not a number.</li>
+      <li><b>Smaller pictures</b>: <i>Setting → Camera → Snapshot</i>. A smaller picture reaches the server sooner; the plate only has to stay readable.</li>
+      <li><b>The right time</b>: <i>Setting → System → General → Date &amp; Time</i>. Every plate shows the camera's own clock.</li>
+    </ul>
+  </details>
+  {% else %}
+  <details class="card inner">
+    <summary><b>No internet at this site?</b> Two more settings keep the camera from waiting</summary>
+    <p>The camera looks up a name and the time before it sends a picture, and without internet it waits a minute and
+      gives up. PlateBox answers both itself. On the camera set <b>both</b> of these to
+      <span data-k="server" data-copy>this computer's address</span>:</p>
+    <ul class="how">
+      <li><b>DNS server</b>: <i>Setting → Network → TCP/IP</i></li>
+      <li><b>NTP (time) server</b>: <i>Setting → System → General → Date &amp; Time</i> (turn NTP on)</li>
+    </ul>
+    <p class="muted small">Worth doing at every site: it also gives the camera the right time, which shows on every plate.</p>
+  </details>
+  <details class="card inner">
+    <summary><b>Using a router that changes addresses?</b> Fix the addresses once</summary>
+    <p>If this computer's number changes later, the camera keeps sending to the old one and nothing arrives. PlateBox
+      keeps working when it can, and warns you when it cannot. The lasting fix: give this computer and the camera
+      <b>fixed addresses</b> (or ask the router's owner to reserve them). The steps are in <i>Settings</i>, under
+      <i>Addresses</i>, once setup is done.</p>
+  </details>
+  {% endif %}
+  <div class="checks">
+    <div id="chk-conn" class="status wait">Waiting for the camera to connect… (press <b>test</b> on the camera)</div>
+    <div id="chk-pic" class="status wait">Waiting for a picture… (then wave a hand in front of the camera)</div>
+    <div id="chk-why" class="status" hidden></div>
+  </div>
+  <p class="small muted"><b>Press Save on the camera first, then test.</b> The camera ignores what you typed until you press Save,
+    and says "Right verification failure" both for that and for a wrong password. The grey box above says which it was.</p>
+  <div id="finished" class="msg good" hidden>
+    <h2>Setup is done ✓</h2>
+    <p>The camera is sending pictures and {{ 'the server' if cfg.server_mode else 'the box' }} is reading them.</p>
+    <a class="button primary" href="/">Show the plates</a>
+  </div>
+  <p class="small">
+    {% if not cfg.server_mode %}<button class="link" id="back-camera">← Choose a different camera</button>{% endif %}
+    <button class="link" id="force" hidden>Finish without a picture</button>
+  </p>
+</section>
+{% endif %}
+
+</div>
+{% endblock %}
