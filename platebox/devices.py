@@ -14,6 +14,7 @@ import re
 import secrets
 import struct
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import Config
@@ -26,6 +27,22 @@ APP_DESC_OFFSET = 32                   # image header (24) + first segment heade
 APP_DESC_MAGIC = 0xABCD5432
 SAFE = re.compile(r"^[A-Za-z0-9._+-]{1,31}$")
 POSITIONS_KEEP_DAYS = 35
+CHECKIN_DEFAULT_S = 120                # how often a gateway signs in; this is also how soon "offline" can be noticed
+CHECKIN_MIN_S, CHECKIN_MAX_S = 30, 3600
+
+
+def ago(seconds: float) -> str:
+    """'just now', '40 s ago', '12 min ago', '3 h ago', '5 days ago'."""
+    s = int(max(0, seconds))
+    if s < 10:
+        return "just now"
+    if s < 90:
+        return f"{s} s ago"
+    if s < 5400:
+        return f"{round(s / 60)} min ago"
+    if s < 36 * 3600:
+        return f"{round(s / 3600)} h ago"
+    return f"{round(s / 86400)} days ago"
 
 
 class FirmwareError(ValueError):
@@ -100,10 +117,40 @@ class Devices:
             return None
         return self.db.one("SELECT * FROM devices WHERE token_hash = ?", (self._hash(token),))
 
-    def list(self) -> list[dict]:
+    def checkin_s(self) -> int:
+        try:
+            v = int(float(self.db.get("gateway_checkin_s", str(CHECKIN_DEFAULT_S))))
+        except (TypeError, ValueError):
+            v = CHECKIN_DEFAULT_S
+        return max(CHECKIN_MIN_S, min(CHECKIN_MAX_S, v))
+
+    def set_checkin_s(self, seconds) -> None:
+        v = int(float(seconds))
+        if not CHECKIN_MIN_S <= v <= CHECKIN_MAX_S:
+            raise ValueError(f"Between {CHECKIN_MIN_S} and {CHECKIN_MAX_S} seconds.")
+        self.db.put("gateway_checkin_s", str(v))
+
+    def liveness(self, last_seen: str | None, now: float | None = None) -> dict:
+        """Is a gateway there? It is LIVE while its sign-ins keep coming: one may be missed (a tunnel, a weak cell)
+        before it is called offline, so "offline" means nothing was heard for two and a half sign-in times."""
+        now = now if now is not None else time.time()
+        if not last_seen:
+            return {"live": False, "state": "never", "age_s": None, "text": "Has never signed in"}
+        try:
+            seen = datetime.strptime(last_seen, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+        except ValueError:
+            return {"live": False, "state": "never", "age_s": None, "text": "Has never signed in"}
+        age = max(0.0, now - seen)
+        live = age <= self.checkin_s() * 2.5 + 15
+        return {"live": live, "state": "live" if live else "offline", "age_s": int(age),
+                "text": ("Live, heard " if live else "Offline, last seen ") + ago(age)}
+
+    def list(self, now: float | None = None) -> list[dict]:
         out = []
         for r in self.db.all("SELECT * FROM devices ORDER BY id"):
             d = dict(r)
+            d.pop("token_hash", None)
+            d.update(self.liveness(r["last_seen"], now))
             try:
                 d["info"] = json.loads(r["info"] or "{}")
             except ValueError:
@@ -121,7 +168,8 @@ class Devices:
                     (model, version, now_iso(), ip[:45], json.dumps(keep)[:2000], dev["id"]))
         if dev["version"] and version and dev["version"] != version:
             self.db.event("gateway_firmware", f"{dev['name']}: {dev['version']} -> {version}")
-        return {"ok": True, "time": int(time.time()), "mode": self.mode(), "firmware": self.update_for(model, version)}
+        return {"ok": True, "time": int(time.time()), "mode": self.mode(), "checkin_s": self.checkin_s(),
+                "firmware": self.update_for(model, version)}
 
     def mode(self) -> str:
         """What this installation records: 'parking' (number plates) or 'bus' (passengers and where they rode)."""

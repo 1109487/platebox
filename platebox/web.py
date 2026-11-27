@@ -780,7 +780,7 @@ def create_app(cfg: Config | None = None, *, reader: Reader | None = None, net=N
         _power("poweroff")
         return render(request, "settings.html", **settings_ctx(request, saved="Shutting down. Wait for the light to go out before unplugging."))
 
-    mount_devices(app, box, render, need_done, same_origin)
+    mount_devices(app, box, render, need_done, api_admin, same_origin)
     mount_bus(app, box, render, need_done, api_admin, same_origin,
               lambda request, **extra: render(request, "settings.html", **settings_ctx(request, **extra)))
     return app

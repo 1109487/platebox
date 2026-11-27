@@ -158,3 +158,37 @@ def test_a_position_with_no_clock_gets_the_servers_time(site):
     dev_id, _ = box.devices.create("Bus 7")
     box.devices.add_positions(dev_id, [{"t": 12, "lat": 18.5, "lon": 73.85}])
     assert abs(box.devices.latest_position()["t"] - time.time()) < 5
+
+
+def test_live_offline_and_last_seen(site):
+    c, box = site
+    _, token = box.devices.create("Gate 1")
+    assert box.devices.list()[0]["state"] == "never"
+    r = c.post("/device/v1/checkin", json={"model": "ba-gateway", "version": "0.2.2"}, headers=bearer(token)).json()
+    assert r["checkin_s"] == 120
+    now = time.time()
+    g = box.devices.list(now)[0]
+    assert g["live"] and g["text"].startswith("Live") and "token_hash" not in g
+    assert box.devices.list(now + 200)[0]["live"]                    # one sign-in missed: still live
+    late = box.devices.list(now + 400)[0]                            # two and a half missed: offline
+    assert not late["live"] and late["text"] == "Offline, last seen 7 min ago"
+    api = c.get("/api/gateways").json()
+    assert api["live"] == 1 and api["total"] == 1 and api["gateways"][0]["state"] == "live"
+    assert "token" not in str(api)
+    page = c.get("/gateways").text
+    assert 'class="dot live"' in page and "Live, heard" in page
+
+
+def test_the_sign_in_time_can_be_changed_and_reaches_the_gateway(site):
+    c, box = site
+    _, token = box.devices.create("Gate 1")
+    assert "Saved" in c.post("/gateways/checkin-time", data={"seconds": "45"}).text
+    assert c.post("/device/v1/checkin", json={}, headers=bearer(token)).json()["checkin_s"] == 45
+    assert "Between 30 and 3600" in c.post("/gateways/checkin-time", data={"seconds": "5"}).text
+    assert "must be a number" in c.post("/gateways/checkin-time", data={"seconds": "soon"}).text
+    assert box.devices.checkin_s() == 45
+
+
+def test_the_gateways_api_needs_the_administrator(make_app):
+    with TestClient(make_app()) as c:
+        assert c.get("/api/gateways").status_code == 401

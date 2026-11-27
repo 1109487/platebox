@@ -3,7 +3,7 @@
 {% block page %}gateways{% endblock %}
 {% block body %}
 <h1>Gateways</h1>
-<p class="muted">A gateway is the 4G box between a camera and this server. It signs in here about once an hour, says how it is,
+<p class="muted">A gateway is the 4G box between a camera and this server. It signs in here every couple of minutes, says how it is,
   and takes new firmware from here by itself.</p>
 {% if saved %}<p class="msg good">{{ saved }}</p>{% endif %}
 {% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
@@ -23,12 +23,13 @@ server token {{ new_token }}</pre>
   <h2>Your gateways</h2>
   {% if gateways %}
   <table class="kv wide">
-    <tr><th>Name</th><th>Firmware</th><th>Last signed in</th><th>4G</th><th>Position</th><th></th></tr>
+    <tr><th>Name</th><th>Now</th><th>Firmware</th><th>4G</th><th>Position</th><th></th></tr>
     {% for g in gateways %}
     <tr>
       <td>{{ g.name }}</td>
-      <td>{{ g.version or 'not seen yet' }}{% if g.waiting %}<br><small class="muted">{{ g.waiting.version }} is waiting for it</small>{% endif %}</td>
-      <td>{% if g.last_seen %}<time data-utc="{{ g.last_seen }}">{{ g.last_seen }}</time>{% else %}never{% endif %}</td>
+      <td data-gw="{{ g.id }}"><span class="dot {{ g.state }}" data-gw-dot></span> <b data-gw-text>{{ g.text }}</b>
+        {% if g.last_seen %}<br><small class="muted">last sign-in <time data-utc="{{ g.last_seen }}" data-gw-time>{{ g.last_seen }}</time></small>{% endif %}</td>
+      <td><span data-gw-version="{{ g.id }}">{{ g.version or 'not seen yet' }}</span>{% if g.waiting %}<br><small class="muted">{{ g.waiting.version }} is waiting for it</small>{% endif %}</td>
       <td>{% if g.info.signal_dbm is defined %}{{ g.info.signal_dbm }} dBm{% endif %} {{ g.info.carrier or '' }}{% if g.info.link %}<br><small class="muted">over {{ g.info.link }}</small>{% endif %}</td>
       <td>{% if g.info.fix %}{{ '%.5f'|format(g.info.lat) }}, {{ '%.5f'|format(g.info.lon) }}{% else %}<span class="muted">no fix</span>{% endif %}</td>
       <td>
@@ -38,6 +39,16 @@ server token {{ new_token }}</pre>
     </tr>
     {% endfor %}
   </table>
+  <p class="muted small">A gateway signs in every {{ checkin_s }} seconds. It shows <b>Live</b> while those keep coming and
+    <b>Offline</b> when none has come for {{ (checkin_s * 2.5 + 15)|int }} seconds (two may be missed on a weak signal before it counts).
+    This page refreshes itself.</p>
+  <form method="post" action="/gateways/checkin-time" class="inline">
+    <label>Sign in every (seconds)
+      <input name="seconds" inputmode="numeric" value="{{ checkin_s }}" size="5">
+      <small>Shorter notices an outage sooner and uses more mobile data: at 120 s about 4 MB a day, at 30 s about 15 MB.</small>
+    </label>
+    <button type="submit">Save</button>
+  </form>
   {% else %}<p class="muted">None yet.</p>{% endif %}
   <form method="post" action="/gateways/add">
     <label>Add a gateway

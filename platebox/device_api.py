@@ -12,7 +12,7 @@ log = logging.getLogger("platebox.device_api")
 MAX_BODY = 64 * 1024
 
 
-def mount_devices(app: FastAPI, box, render, need_done, same_origin) -> None:
+def mount_devices(app: FastAPI, box, render, need_done, api_admin, same_origin) -> None:
     devices = box.devices
 
     def gateway(request: Request):
@@ -67,10 +67,27 @@ def mount_devices(app: FastAPI, box, render, need_done, same_origin) -> None:
     # -- the administrator's side ------------------------------------------------------------------
     def page(request: Request, **extra):
         ctx = dict(active="gateways", gateways=devices.list(), firmware=devices.firmware_list(), mode=devices.mode(),
-                   latest=devices.latest_position(), saved=None, error=None, new_token=None, new_name=None,
+                   latest=devices.latest_position(), checkin_s=devices.checkin_s(), saved=None, error=None, new_token=None, new_name=None,
                    host=box.cfg.public_host or request.headers.get("host", ""))
         ctx.update(extra)
         return render(request, "gateways.html", **ctx)
+
+    @app.get("/api/gateways", dependencies=[Depends(api_admin)])
+    def gateways_now():
+        """For the page's own refresh, and for anything else that wants to know which gateways are there."""
+        rows = devices.list()
+        return {"ok": True, "checkin_s": devices.checkin_s(), "live": sum(1 for g in rows if g["live"]), "total": len(rows),
+                "gateways": [{k: g[k] for k in ("id", "name", "model", "version", "last_seen", "live", "state", "age_s", "text")}
+                             | {"signal_dbm": g["info"].get("signal_dbm"), "carrier": g["info"].get("carrier"),
+                                "waiting": (g["waiting"] or {}).get("version")} for g in rows]}
+
+    @app.post("/gateways/checkin-time", dependencies=[Depends(need_done), Depends(same_origin)])
+    def checkin_time(request: Request, seconds: str = Form("")):
+        try:
+            devices.set_checkin_s(seconds)
+        except ValueError as e:
+            return page(request, error=str(e) if "Between" in str(e) else "That must be a number of seconds.")
+        return page(request, saved="Saved. Each gateway picks the new time up at its next sign-in.")
 
     @app.get("/gateways", response_class=HTMLResponse, dependencies=[Depends(need_done)])
     def gateways(request: Request):
@@ -101,7 +118,7 @@ def mount_devices(app: FastAPI, box, render, need_done, same_origin) -> None:
         except FirmwareError as e:
             return page(request, error=str(e))
         return page(request, saved=f"Firmware {fw['model']} {fw['version']} is here. Each gateway of that kind takes it "
-                                   "the next time it signs in (within an hour, or at once with `ota check` on its console).")
+                                   "the next time it signs in (within a few minutes, or at once with `ota check` on its console).")
 
     @app.post("/gateways/firmware/{fw_id}/remove", dependencies=[Depends(need_done), Depends(same_origin)])
     def remove_firmware(fw_id: int):

@@ -108,8 +108,8 @@ A gateway (`firmware/gateway`: ESP32-S3, W5500, 4G modem, GNSS) is the 4G box be
 
 1. **Gateways → Add a gateway.** The page shows a token once. On the gateway's console type
    `server host <this server's name>` and `server token <the token>`.
-2. The gateway signs in over HTTPS about once an hour (`ota check` does it at once): firmware version, signal,
-   position. The page shows when each one last signed in.
+2. The gateway signs in over HTTPS every two minutes (`ota check` does it at once): firmware version, signal,
+   position. The page shows each one as **Live** or **Offline** with when it was last heard, and refreshes itself.
 3. **Gateways → Firmware → Upload** the new `build/ba-gateway.bin`. Its name and version are read from the file
    (raise `PROJECT_VER` in the gateway's `CMakeLists.txt` for every build; the same version is refused twice).
 4. At its next sign-in each gateway downloads it into the spare half of its flash, checks the SHA-256 the server

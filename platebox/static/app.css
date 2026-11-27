@@ -108,3 +108,8 @@ table.wide tr + tr td { border-top: 1px solid rgba(128, 128, 128, .25); }
 img.face { border-radius: 8px; object-fit: cover; display: inline-block; }
 pre.mono { overflow-x: auto; padding: .6rem; border: 1px solid rgba(128, 128, 128, .3); border-radius: 6px; }
 @media (max-width: 720px) { table.wide { display: block; overflow-x: auto; } }
+
+/* A gateway's state: green while its sign-ins keep coming. */
+.dot { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; background: #8a8f8a; vertical-align: baseline; }
+.dot.live { background: #6dbb05; box-shadow: 0 0 0 3px rgba(109, 187, 5, .25); }
+.dot.offline { background: #d9534f; }

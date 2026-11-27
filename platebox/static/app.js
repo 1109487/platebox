@@ -259,6 +259,27 @@
     start();
   }
 
+  /* ---- gateways: is each one there right now ---- */
+  function gatewaysPage() {
+    async function tick() {
+      try {
+        const s = await api("/api/gateways");
+        s.gateways.forEach((g) => {
+          const cell = document.querySelector(`[data-gw="${g.id}"]`);
+          if (!cell) return;
+          cell.querySelector("[data-gw-dot]").className = "dot " + g.state;
+          cell.querySelector("[data-gw-text]").textContent = g.text;
+          const t = cell.querySelector("[data-gw-time]");
+          if (t && g.last_seen && t.dataset.utc !== g.last_seen) { t.dataset.utc = g.last_seen; t.textContent = g.last_seen; localize(cell); }
+          const v = document.querySelector(`[data-gw-version="${g.id}"]`);
+          if (v && g.version) v.textContent = g.version;
+        });
+      } catch (e) { /* server restarting: next tick */ }
+      setTimeout(tick, 10000);
+    }
+    setTimeout(tick, 10000);
+  }
+
   function settingsPage() {
     const wt = $("#watch-test");
     if (wt) wt.addEventListener("click", async () => {
@@ -322,6 +343,7 @@
     if (page === "plates") platesPage();
     if (page === "live") livePage();
     if (page === "motion") motionPage();
+    if (page === "gateways") gatewaysPage();
     if (page === "settings") settingsPage();
     if (page === "setup") {
       const step = ($("#setup") || {}).dataset ? $("#setup").dataset.step : "";
